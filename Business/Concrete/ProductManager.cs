@@ -1,5 +1,6 @@
 ﻿using Business.Abstract;
 using Business.Constants;
+using Business.CSS;
 using Business.ValidationRules.FluentValidation;
 using Core.Aspects.Autofac.Validation;
 using Core.CrossCuttingConcerns.Validation;
@@ -11,17 +12,24 @@ using Entities.DTOs;
 using FluentValidation;
 using System;
 using System.Collections.Generic;
+using System.Drawing;
 using System.Text;
+using System.Linq;
+using Core.Utilities.Business;
 
 namespace Business.Concrete
 {
     public class ProductManager : IProductService
     {
         IProductDal _productDal;
+        ICategoryService _categoryService;
+        
 
-        public ProductManager(IProductDal productDal)
+        public ProductManager(IProductDal productDal, ICategoryService categoryService)
         {
             _productDal = productDal;
+            _categoryService = categoryService;
+            
         }
 
         
@@ -29,6 +37,17 @@ namespace Business.Concrete
         public IResult Add(Product product)
         {
             //business codes
+            //aynı isimdde ürün eklenemez
+            // eger mevcut kategori sayisi 15 i gectiyse sisteme yeni ürün eklenemez
+
+            IResult result = BusinessRule.Run(CheckIfProductHasSameNameCorrect(product.ProductName)
+                                              , CheckIfProductCountOfCategoryCorrect(product.CategoryId)
+                                              , CheckLimitCategoryCount());
+
+            if (result != null)
+            {
+                return result;
+            }
 
             _productDal.Add(product);
 
@@ -68,6 +87,57 @@ namespace Business.Concrete
                 return new ErrorDataResult<List<ProductDetailDto>>(Messages.MaintenanceTime);
             }
             return new SuccessDataResult<List<ProductDetailDto>>(_productDal.GetProductDetails());
+        }
+
+        [ValidationAspect(typeof(ProductValidator))]
+        public IResult Update(Product product)
+        {
+            throw new NotImplementedException();
+        }
+
+        private IResult CheckIfProductCountOfCategoryCorrect(int categoryId)
+        {
+
+            int totalCategoryCount = _productDal.GetAll(p => p.CategoryId == categoryId).Count;
+
+            if (totalCategoryCount >= 10)
+            {
+                return new ErrorResult(Messages.ProductCountOfCategoryError);
+            }
+
+            return new SuccessResult();
+
+        }
+
+        private IResult CheckIfProductHasSameNameCorrect(string name)
+        {
+            var sameProduct = _productDal.GetAll(p => p.ProductName == name).Any();
+
+            if (sameProduct)
+            {
+
+                return new ErrorResult(Messages.ProductHasSameNameError);
+
+            }
+
+            return new SuccessResult();
+        }
+
+        private IResult CheckLimitCategoryCount()
+        {
+            // CATEGORY DAL KULLANAMZDIK CÜNKÜ BURASI PRODUCT MANAGER
+            // FAKAT CATEGORYNİN SERVİİNİ KULLANABİLİR
+            var categories = _categoryService.GetAll();
+
+            if(categories.Data.Count > 15)
+            {
+               
+                
+                return new ErrorResult(Messages.CategoryLimitArriveError);
+                
+            }
+
+            return new SuccessResult();
         }
     }
 }
